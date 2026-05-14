@@ -5,6 +5,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const config = require('./config/config');
+const initDb = require('./db/initDb');
 
 const app = express();
 
@@ -44,11 +45,20 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
-app.listen(config.port, () => {
-  console.log(`\n🚀 Facturación CFDI 4.0`);
-  console.log(`   Puerto: ${config.port}`);
-  console.log(`   Modo: ${config.cfdi.env === 'test' ? '🧪 PRUEBA' : '🏭 PRODUCCIÓN'}`);
-  console.log(`   Timbrado: ${config.cfdi.timbradoUrl}`);
-  console.log(`   DB: ${config.db.host}:${config.db.port}/${config.db.database}`);
-  console.log(`\n   Accede en: http://localhost:${config.port}\n`);
+async function start() {
+  await initDb();
+
+  app.listen(config.port, () => {
+    console.log(`\n🚀 Facturación CFDI 4.0`);
+    console.log(`   Puerto: ${config.port}`);
+    console.log(`   Modo: ${config.cfdi.env === 'test' ? '🧪 PRUEBA' : '🏭 PRODUCCIÓN'}`);
+    console.log(`   Timbrado: ${config.cfdi.timbradoUrl}`);
+    console.log(`   DB: ${config.db.host}:${config.db.port}/${config.db.database}`);
+    console.log(`\n   Accede en: http://localhost:${config.port}\n`);
+  });
+}
+
+start().catch(err => {
+  console.error('Error al iniciar:', err.message);
+  process.exit(1);
 });
