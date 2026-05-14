@@ -266,6 +266,64 @@ router.post('/facturar', async (req, res) => {
   }
 });
 
+// POST /api/webhook/cfdi/buscar — localiza un CFDI ya timbrado por folio o UUID
+router.post('/cfdi/buscar', async (req, res) => {
+  try {
+    const auth = await resolveWebhook(req);
+    if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+    const { folio_venta, uuid, rfc } = req.body;
+    if (!folio_venta && !uuid) {
+      return res.status(400).json({ error: 'Se requiere folio_venta o uuid' });
+    }
+
+    let query, params;
+    if (uuid) {
+      query = `SELECT f.id, f.uuid, f.serie, f.folio, f.fecha, f.total,
+                      v.folio_venta, cl.rfc, cl.nombre
+               FROM facturas f
+               LEFT JOIN ventas v ON v.factura_id = f.id
+               LEFT JOIN clientes cl ON cl.id = f.cliente_id
+               WHERE f.uuid = $1 AND f.empresa_id = $2 AND f.estado = 'TIMBRADO'`;
+      params = [uuid.trim().toUpperCase(), auth.empresa.empresa_id];
+    } else {
+      query = `SELECT f.id, f.uuid, f.serie, f.folio, f.fecha, f.total,
+                      v.folio_venta, cl.rfc, cl.nombre
+               FROM facturas f
+               LEFT JOIN ventas v ON v.factura_id = f.id
+               LEFT JOIN clientes cl ON cl.id = f.cliente_id
+               WHERE v.folio_venta = $1 AND f.empresa_id = $2 AND f.estado = 'TIMBRADO'`;
+      params = [folio_venta.trim(), auth.empresa.empresa_id];
+    }
+
+    const { rows } = await db.query(query, params);
+    if (!rows[0]) {
+      return res.status(404).json({ error: 'No se encontró ningún CFDI timbrado para ese folio' });
+    }
+
+    const f = rows[0];
+
+    if (rfc && f.rfc && f.rfc.toUpperCase() !== rfc.trim().toUpperCase()) {
+      return res.status(403).json({ error: 'El RFC no coincide con el receptor de la factura' });
+    }
+
+    return res.json({
+      ok: true,
+      uuid: f.uuid,
+      folio_cfdi: `${f.serie || ''}${f.folio || ''}`,
+      folio_venta: f.folio_venta,
+      fecha: f.fecha,
+      total: parseFloat(f.total),
+      rfc: f.rfc,
+      nombre: f.nombre,
+      download_url: `https://facturas.empresasinteligentes.ai/api/webhook/cfdi/${f.uuid}`,
+    });
+  } catch (err) {
+    console.error('[WEBHOOK buscar]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/webhook/ping — verificar que el webhook está activo
 router.get('/ping', async (req, res) => {
   try {
